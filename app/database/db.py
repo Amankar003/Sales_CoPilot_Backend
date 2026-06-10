@@ -22,5 +22,6 @@ def create_db_and_tables():
     from app.models.report import Report  # noqa: F401
     from app.models.outreach import Outreach  # noqa: F401
     from app.models.email_log import EmailLog  # noqa: F401
+    from app.models.campaign import Campaign  # noqa: F401
 
     SQLModel.metadata.create_all(engine)

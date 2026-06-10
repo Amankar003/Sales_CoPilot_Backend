@@ -75,6 +75,28 @@ def get_report(
     
     return response_data
 
+@router.get("", response_model=list[ReportResponse])
+def get_reports(
+    campaign_id: int = None,
+    session: Session = Depends(get_session),
+):
+    """Get all reports, optionally filtered by campaign."""
+    query = select(Report, Business.name).join(Business, Report.business_id == Business.id)
+    if campaign_id:
+        query = query.where(Business.campaign_id == campaign_id)
+    
+    results = session.exec(query.order_by(Report.created_at.desc())).all()
+    
+    response_list = []
+    for report, b_name in results:
+        response_data = report.model_dump()
+        response_data["business_name"] = b_name
+        response_data["pain_points"] = safe_json_loads(report.pain_points)
+        response_data["recommended_solutions"] = safe_json_loads(report.recommended_solutions)
+        response_list.append(response_data)
+        
+    return response_list
+
 
 @router.get("/download/{report_id}")
 def download_report(

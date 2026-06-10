@@ -11,6 +11,7 @@ class ReportResponse(BaseModel):
     """Schema for report response."""
     id: int
     business_id: int
+    business_name: Optional[str] = None
     audit_id: int
     title: str
     executive_summary: Optional[str] = None

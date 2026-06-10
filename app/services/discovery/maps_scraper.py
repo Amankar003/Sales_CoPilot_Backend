@@ -1,201 +1,333 @@
 """
-maps_scraper.py - Simulates Google Maps-like scraping with mock data fallback.
-Uses DuckDuckGo search to find businesses in India.
+maps_scraper.py - Real Google Maps scraper using async Playwright.
+
+This scraper collects real business data from Google Maps.
+No mock data. No generated data. No fake fallback.
 """
 
-import random
-from typing import List, Dict, Any
+import time
+import asyncio
+import urllib.parse
+import os
+from typing import Callable, Optional
+
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Mock Indian businesses for fallback discovery
-MOCK_BUSINESSES = {
-    "hospital": [
-        {"name": "Max Super Speciality Hospital", "rating": 4.3, "reviews": 2850},
-        {"name": "Fortis Hospital", "rating": 4.1, "reviews": 1920},
-        {"name": "Apollo Hospital", "rating": 4.4, "reviews": 3100},
-        {"name": "Medanta - The Medicity", "rating": 4.2, "reviews": 2650},
-        {"name": "Artemis Hospital", "rating": 4.0, "reviews": 1800},
-        {"name": "BLK Super Speciality Hospital", "rating": 3.9, "reviews": 1500},
-        {"name": "Sir Ganga Ram Hospital", "rating": 4.1, "reviews": 2200},
-        {"name": "Jaypee Hospital", "rating": 3.8, "reviews": 1100},
-        {"name": "Yatharth Hospital", "rating": 4.0, "reviews": 890},
-        {"name": "Sharda Hospital", "rating": 3.7, "reviews": 650},
-    ],
-    "restaurant": [
-        {"name": "Bukhara - ITC Maurya", "rating": 4.6, "reviews": 4200},
-        {"name": "Indian Accent", "rating": 4.5, "reviews": 3800},
-        {"name": "Karim's", "rating": 4.3, "reviews": 5600},
-        {"name": "Moti Mahal Delux", "rating": 4.1, "reviews": 2900},
-        {"name": "Paranthe Wali Gali", "rating": 4.0, "reviews": 3200},
-        {"name": "Haldiram's", "rating": 4.2, "reviews": 6100},
-        {"name": "Bikanervala", "rating": 4.0, "reviews": 4500},
-        {"name": "Saravana Bhavan", "rating": 4.3, "reviews": 3600},
-        {"name": "Punjab Grill", "rating": 4.1, "reviews": 2100},
-        {"name": "Sagar Ratna", "rating": 3.9, "reviews": 1800},
-    ],
-    "school": [
-        {"name": "Delhi Public School", "rating": 4.4, "reviews": 1200},
-        {"name": "Ryan International School", "rating": 4.0, "reviews": 890},
-        {"name": "Amity International School", "rating": 4.2, "reviews": 750},
-        {"name": "Lotus Valley International School", "rating": 4.3, "reviews": 620},
-        {"name": "The Heritage School", "rating": 4.1, "reviews": 540},
-        {"name": "Pathways World School", "rating": 4.5, "reviews": 480},
-        {"name": "Sanskriti School", "rating": 4.3, "reviews": 670},
-        {"name": "Shiv Nadar School", "rating": 4.4, "reviews": 510},
-        {"name": "G.D. Goenka Public School", "rating": 4.0, "reviews": 430},
-        {"name": "DAV Public School", "rating": 3.9, "reviews": 380},
-    ],
-    "gym": [
-        {"name": "Gold's Gym", "rating": 4.1, "reviews": 1500},
-        {"name": "Anytime Fitness", "rating": 4.0, "reviews": 1200},
-        {"name": "Cult.fit", "rating": 4.3, "reviews": 2100},
-        {"name": "Talwalkars Gym", "rating": 3.8, "reviews": 900},
-        {"name": "Fitness First", "rating": 4.2, "reviews": 1100},
-        {"name": "Snap Fitness", "rating": 3.9, "reviews": 780},
-        {"name": "Muscle & Strength Gym", "rating": 4.0, "reviews": 650},
-        {"name": "The Gym", "rating": 3.7, "reviews": 420},
-        {"name": "CrossFit Studio", "rating": 4.4, "reviews": 380},
-        {"name": "Iron Paradise Gym", "rating": 4.1, "reviews": 550},
-    ],
-    "salon": [
-        {"name": "Looks Salon", "rating": 4.2, "reviews": 1800},
-        {"name": "Lakme Salon", "rating": 4.0, "reviews": 2200},
-        {"name": "Jawed Habib Hair & Beauty", "rating": 3.9, "reviews": 1600},
-        {"name": "VLCC", "rating": 4.1, "reviews": 1900},
-        {"name": "Naturals Salon", "rating": 4.0, "reviews": 1400},
-        {"name": "Green Trends", "rating": 3.8, "reviews": 1100},
-        {"name": "BBlunt Salon", "rating": 4.3, "reviews": 950},
-        {"name": "Enrich Salon", "rating": 4.1, "reviews": 820},
-        {"name": "Affinity Salon", "rating": 4.2, "reviews": 760},
-        {"name": "Jean-Claude Biguine", "rating": 4.4, "reviews": 680},
-    ],
-    "hotel": [
-        {"name": "The Oberoi", "rating": 4.7, "reviews": 3200},
-        {"name": "Taj Palace", "rating": 4.6, "reviews": 4100},
-        {"name": "ITC Grand Bharat", "rating": 4.5, "reviews": 2800},
-        {"name": "The Leela Palace", "rating": 4.6, "reviews": 3500},
-        {"name": "Radisson Blu Hotel", "rating": 4.2, "reviews": 2100},
-        {"name": "Hyatt Regency", "rating": 4.3, "reviews": 1900},
-        {"name": "Holiday Inn", "rating": 4.0, "reviews": 1500},
-        {"name": "Crowne Plaza", "rating": 4.1, "reviews": 1700},
-        {"name": "Lemon Tree Hotel", "rating": 3.9, "reviews": 1200},
-        {"name": "OYO Townhouse", "rating": 3.7, "reviews": 890},
-    ],
-}
 
-# Generic fallback for categories not in the mock data
-GENERIC_MOCK = [
-    {"name": "{category} Solutions India", "rating": 4.0, "reviews": 500},
-    {"name": "Premier {category} Services", "rating": 3.9, "reviews": 420},
-    {"name": "{category} Hub {location}", "rating": 4.1, "reviews": 380},
-    {"name": "New Age {category}", "rating": 3.8, "reviews": 310},
-    {"name": "{category} World {location}", "rating": 4.2, "reviews": 550},
-    {"name": "Star {category} Center", "rating": 3.7, "reviews": 280},
-    {"name": "Royal {category} {location}", "rating": 4.0, "reviews": 460},
-    {"name": "{category} Plus Services", "rating": 3.9, "reviews": 340},
-    {"name": "Global {category} {location}", "rating": 4.1, "reviews": 490},
-    {"name": "Metro {category} Center", "rating": 3.8, "reviews": 270},
-]
+async def _verify_chromium_installed() -> bool:
+    """Verify that Playwright Chromium browser is installed before launching."""
+    try:
+        # Try to find the chromium executable via Playwright internals
+        from playwright._impl._driver import compute_driver_executable
+        driver = compute_driver_executable()
+        if driver and os.path.exists(str(driver)):
+            return True
+    except Exception:
+        pass
 
-# Sample addresses for mock data
-MOCK_ADDRESSES = {
-    "Delhi": [
-        "Connaught Place, New Delhi",
-        "Lajpat Nagar, South Delhi",
-        "Karol Bagh, Central Delhi",
-        "Rajouri Garden, West Delhi",
-        "Dwarka Sector 12, New Delhi",
-    ],
-    "Noida": [
-        "Sector 18, Noida",
-        "Sector 62, Noida",
-        "Sector 44, Noida",
-        "Sector 15, Noida",
-        "Greater Noida West",
-    ],
-    "Gurgaon": [
-        "DLF Phase 1, Gurgaon",
-        "MG Road, Gurgaon",
-        "Sector 29, Gurgaon",
-        "Cyber City, Gurgaon",
-        "Sohna Road, Gurgaon",
-    ],
-    "Mumbai": [
-        "Andheri West, Mumbai",
-        "Bandra Kurla Complex, Mumbai",
-        "Lower Parel, Mumbai",
-        "Powai, Mumbai",
-        "Juhu, Mumbai",
-    ],
-    "Bangalore": [
-        "Koramangala, Bangalore",
-        "Indiranagar, Bangalore",
-        "Whitefield, Bangalore",
-        "MG Road, Bangalore",
-        "Electronic City, Bangalore",
-    ],
-}
-
-# Default addresses for cities not in mock data
-DEFAULT_ADDRESSES = [
-    "Main Market Area",
-    "City Center",
-    "Commercial Complex",
-    "Industrial Area",
-    "Ring Road",
-]
+    # Secondary check: try to actually launch and immediately close
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            await browser.close()
+            return True
+    except Exception as exc:
+        logger.error(f"Chromium verification failed: {repr(exc)}")
+        return False
 
 
-def get_mock_businesses(
+def _parse_reviews_count(value: str) -> Optional[int]:
+    if not value:
+        return None
+    try:
+        cleaned = (
+            value.replace("(", "")
+            .replace(")", "")
+            .replace(",", "")
+            .replace("reviews", "")
+            .replace("review", "")
+            .strip()
+        )
+        return int(cleaned)
+    except Exception:
+        return None
+
+
+def _parse_rating(value: str) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        return float(value.strip().replace(",", "."))
+    except Exception:
+        return None
+
+
+async def _async_scrape_google_maps_businesses(
     sector: str,
     location: str,
-    limit: int = 10,
-) -> List[Dict[str, Any]]:
+    campaign_id: int = None,
+    limit: int | None = None,
+    max_runtime_seconds: int = 120,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> list[dict]:
     """
-    Generate mock business data for a given sector and location.
-    Used as fallback when real scraping is not available.
+    Scrape real businesses from Google Maps using async Playwright.
+
+    Args:
+        sector: Business sector, e.g. "Hospital"
+        location: Location, e.g. "Noida"
+        campaign_id: Campaign ID for logging.
+        limit: Optional business limit. If None, scrape all loaded results.
+        max_runtime_seconds: Runtime safety limit.
+        should_stop: Optional external stop callback.
+
+    Returns:
+        List of real business dictionaries matching the Business model.
     """
-    logger.info(f"Generating mock businesses: {sector} in {location} (limit: {limit})")
+    # Lazy import to avoid loading Playwright at module level
+    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-    # Find matching mock data
-    sector_lower = sector.lower().rstrip("s")  # Remove trailing 's' for matching
-    mock_list = MOCK_BUSINESSES.get(sector_lower, None)
+    search_query = f"{sector} in {location}".strip()
+    encoded_query = urllib.parse.quote_plus(search_query)
+    maps_url = f"https://www.google.com/maps/search/{encoded_query}"
 
-    if not mock_list:
-        # Use generic template
-        mock_list = [
-            {
-                "name": item["name"].format(category=sector.title(), location=location),
-                "rating": item["rating"],
-                "reviews": item["reviews"],
-            }
-            for item in GENERIC_MOCK
-        ]
+    log_prefix = f"[Campaign {campaign_id}] " if campaign_id else ""
+    logger.info(f"{log_prefix}Google Maps scrape starting | query='{search_query}' | url={maps_url}")
 
-    # Get addresses for location
-    addresses = MOCK_ADDRESSES.get(location, DEFAULT_ADDRESSES)
+    results: list[dict] = []
+    start_time = time.time()
 
-    # Build business data
-    businesses = []
-    for i, mock in enumerate(mock_list[:limit]):
-        phone_suffix = random.randint(1000000, 9999999)
-        business = {
-            "name": mock["name"],
-            "category": sector.title(),
-            "location": location,
-            "address": addresses[i % len(addresses)] if addresses else f"{location} Area",
-            "phone": f"+91 98{phone_suffix}",
-            "email": None,
-            "website": None,
-            "google_rating": mock.get("rating"),
-            "reviews_count": mock.get("reviews"),
-            "description": f"A well-known {sector.lower()} located in {location}.",
-            "source": "discovered",
-            "confidence_score": round(random.uniform(0.6, 0.95), 2),
-        }
-        businesses.append(business)
+    try:
+        async with async_playwright() as p:
+            logger.info(f"{log_prefix}Launching Chromium browser (headless)...")
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
+            )
+            logger.info(f"{log_prefix}Chromium launched successfully.")
 
-    logger.info(f"Generated {len(businesses)} mock businesses")
-    return businesses
+            context = await browser.new_context(
+                viewport={"width": 1366, "height": 768},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+
+            page = await context.new_page()
+            logger.info(f"{log_prefix}Navigating to Google Maps...")
+            await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
+
+            try:
+                await page.wait_for_selector('div[role="feed"]', timeout=15000)
+                logger.info(f"{log_prefix}Google Maps results feed loaded.")
+            except PlaywrightTimeoutError:
+                logger.warning(f"{log_prefix}Google Maps results feed did not load within 15s.")
+                await browser.close()
+                return []
+
+            scrollable_div = page.locator('div[role="feed"]').first
+
+            previous_count = 0
+            no_new_results_count = 0
+            max_no_new_scrolls = 5
+
+            logger.info(f"{log_prefix}Scrolling to load business cards...")
+
+            while True:
+                if should_stop and should_stop():
+                    logger.info(f"{log_prefix}Scrape stopped by user.")
+                    break
+
+                if time.time() - start_time > max_runtime_seconds:
+                    logger.info(f"{log_prefix}Scrape stopped: max runtime {max_runtime_seconds}s reached.")
+                    break
+
+                cards = await page.locator('a[href*="https://www.google.com/maps/place/"]').all()
+                current_count = len(cards)
+
+                if current_count != previous_count:
+                    logger.info(f"{log_prefix}Loaded {current_count} business cards so far.")
+                    previous_count = current_count
+                    no_new_results_count = 0
+                else:
+                    no_new_results_count += 1
+
+                if limit is not None and current_count >= limit:
+                    logger.info(f"{log_prefix}Reached requested limit: {limit}")
+                    break
+
+                if no_new_results_count >= max_no_new_scrolls:
+                    logger.info(f"{log_prefix}No more new results after {max_no_new_scrolls} scroll attempts. Total loaded: {current_count}")
+                    break
+
+                try:
+                    await scrollable_div.hover(timeout=2000)
+                    await page.mouse.wheel(0, 2500)
+                except Exception:
+                    await page.keyboard.press("PageDown")
+
+                await asyncio.sleep(1.5)
+
+            cards = await page.locator('a[href*="https://www.google.com/maps/place/"]').all()
+            cards_to_process = cards[:limit] if limit is not None else cards
+
+            logger.info(f"{log_prefix}Extracting details from {len(cards_to_process)} cards...")
+
+            seen_names = set()
+
+            for index, card in enumerate(cards_to_process, start=1):
+                if should_stop and should_stop():
+                    logger.info(f"{log_prefix}Extraction stopped by user.")
+                    break
+
+                if time.time() - start_time > max_runtime_seconds:
+                    logger.info(f"{log_prefix}Extraction stopped: max runtime reached.")
+                    break
+
+                try:
+                    await card.click(timeout=5000)
+                    await asyncio.sleep(2)
+
+                    business_name = ""
+                    for selector in ["h1.DUwDvf", "h1.fontHeadlineLarge", "h1"]:
+                        loc = page.locator(selector)
+                        if await loc.count() > 0:
+                            business_name = await loc.first.inner_text(timeout=2000)
+                            business_name = business_name.strip()
+                        if business_name:
+                            break
+
+                    if not business_name:
+                        logger.warning(f"{log_prefix}Card {index}: missing business name, skipping.")
+                        continue
+
+                    normalized_name = business_name.strip().lower()
+                    if normalized_name in seen_names:
+                        continue
+                    seen_names.add(normalized_name)
+
+                    address = ""
+                    address_loc = page.locator('button[data-item-id="address"]')
+                    if await address_loc.count() > 0:
+                        address = await address_loc.first.inner_text()
+                    if "\n" in address:
+                        address = address.split("\n")[-1].strip()
+
+                    phone = ""
+                    phone_loc = page.locator('button[data-item-id*="phone:tel:"]')
+                    if await phone_loc.count() > 0:
+                        phone = await phone_loc.first.inner_text()
+                    if "\n" in phone:
+                        phone = phone.split("\n")[-1].strip()
+
+                    website = ""
+                    website_loc = page.locator('a[data-item-id="authority"]')
+                    if await website_loc.count() > 0:
+                        website = await website_loc.first.get_attribute("href") or ""
+
+                    rating_text = ""
+                    rating_loc = page.locator("div.F7nice")
+                    if await rating_loc.count() > 0:
+                        rating_text = await rating_loc.first.inner_text()
+                    rating = None
+                    reviews_count = None
+
+                    if rating_text:
+                        parts = [part.strip() for part in rating_text.split("\n") if part.strip()]
+                        if len(parts) >= 1:
+                            rating = _parse_rating(parts[0])
+                        if len(parts) >= 2:
+                            reviews_count = _parse_reviews_count(parts[1])
+
+                    category = sector.title()
+
+                    business = {
+                        "name": business_name,
+                        "category": category,
+                        "location": location,
+                        "address": address or None,
+                        "phone": phone or None,
+                        "email": None,
+                        "website": website or None,
+                        "google_rating": rating,
+                        "reviews_count": reviews_count,
+                        "description": None,
+                        "source": "google_maps",
+                        "confidence_score": 0.9,
+                    }
+
+                    results.append(business)
+                    logger.info(f"{log_prefix}Extracted [{index}]: {business_name} | phone={phone or 'N/A'} | website={'yes' if website else 'no'}")
+
+                except Exception as exc:
+                    logger.error(f"{log_prefix}Error extracting card {index}: {repr(exc)}")
+
+            await browser.close()
+            logger.info(f"{log_prefix}Browser closed.")
+
+    except Exception as exc:
+        logger.error(f"{log_prefix}Google Maps scraper FAILED: {repr(exc)}")
+        raise  # Re-raise so caller can handle it properly
+
+    elapsed = round(time.time() - start_time, 1)
+    logger.info(f"{log_prefix}Google Maps scrape completed | businesses_found={len(results)} | elapsed={elapsed}s")
+    return results
+
+
+def _sync_run_scraper(
+    sector: str,
+    location: str,
+    campaign_id: int = None,
+    limit: int | None = None,
+    max_runtime_seconds: int = 120,
+) -> list[dict]:
+    """
+    Synchronous wrapper that creates a fresh event loop and runs the scraper.
+    This guarantees a WindowsProactorEventLoopPolicy is used on Windows, bypassing uvicorn's override.
+    """
+    # Force Proactor loop on Windows in this thread
+    import sys
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        
+    return asyncio.run(
+        _async_scrape_google_maps_businesses(
+            sector=sector,
+            location=location,
+            campaign_id=campaign_id,
+            limit=limit,
+            max_runtime_seconds=max_runtime_seconds,
+        )
+    )
+
+
+async def scrape_google_maps_businesses(
+    sector: str,
+    location: str,
+    campaign_id: int = None,
+    limit: int | None = None,
+    max_runtime_seconds: int = 120,
+    should_stop: Optional[Callable[[], bool]] = None,
+) -> list[dict]:
+    """
+    Runs the Google Maps Playwright scraper in a separate thread.
+    This prevents Playwright from crashing due to uvicorn's event loop policy
+    and prevents blocking the main FastAPI thread.
+    """
+    return await asyncio.to_thread(
+        _sync_run_scraper,
+        sector,
+        location,
+        campaign_id,
+        limit,
+        max_runtime_seconds,
+    )

@@ -13,6 +13,7 @@ class Business(SQLModel, table=True):
     __tablename__ = "businesses"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    campaign_id: Optional[int] = Field(default=None, foreign_key="campaigns.id", index=True)
     name: str = Field(index=True)
     category: str = Field(index=True)
     location: str = Field(index=True)

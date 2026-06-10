@@ -74,6 +74,7 @@ async def send_outreach_email(
 def get_email_logs(
     skip: int = 0,
     limit: int = 50,
+    campaign_id: int = None,
     session: Session = Depends(get_session),
 ):
     """Get history of sent emails."""
@@ -81,10 +82,12 @@ def get_email_logs(
     query = (
         select(EmailLog, Business.name.label("business_name"))
         .join(Business, EmailLog.business_id == Business.id)
-        .order_by(EmailLog.id.desc())
-        .offset(skip)
-        .limit(limit)
     )
+    
+    if campaign_id:
+        query = query.where(Business.campaign_id == campaign_id)
+        
+    query = query.order_by(EmailLog.id.desc()).offset(skip).limit(limit)
     
     results = session.exec(query).all()
     

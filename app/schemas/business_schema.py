@@ -9,6 +9,7 @@ from datetime import datetime
 
 class BusinessCreate(BaseModel):
     """Schema for creating a new business lead."""
+    campaign_id: Optional[int] = None
     name: str
     category: str
     location: str
@@ -27,6 +28,7 @@ class BusinessCreate(BaseModel):
 
 class BusinessUpdate(BaseModel):
     """Schema for updating a business lead."""
+    campaign_id: Optional[int] = None
     name: Optional[str] = None
     category: Optional[str] = None
     location: Optional[str] = None
@@ -45,6 +47,7 @@ class BusinessUpdate(BaseModel):
 class BusinessResponse(BaseModel):
     """Schema for business response."""
     id: int
+    campaign_id: Optional[int] = None
     name: str
     category: str
     location: str
@@ -71,11 +74,12 @@ class DiscoverRequest(BaseModel):
     """Schema for lead discovery request."""
     sector: str
     location: str
-    limit: int = 10
+    max_pages: int = 10
+    max_runtime_seconds: int = 120
 
 
 class DiscoverResponse(BaseModel):
     """Schema for lead discovery response."""
-    leads: List[BusinessResponse]
-    total: int
+    businesses: List[BusinessResponse]
+    count: int
     message: str

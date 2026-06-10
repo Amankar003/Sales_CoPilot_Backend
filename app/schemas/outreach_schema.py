@@ -11,6 +11,7 @@ class OutreachResponse(BaseModel):
     """Schema for outreach response."""
     id: int
     business_id: int
+    business_name: Optional[str] = None
     audit_id: Optional[int] = None
     email_subject: Optional[str] = None
     email_body: Optional[str] = None

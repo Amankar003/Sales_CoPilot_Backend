@@ -43,12 +43,15 @@ def get_leads(
     skip: int = 0,
     limit: int = 100,
     category: str = None,
+    campaign_id: int = None,
     session: Session = Depends(get_session),
 ):
     """Get all business leads with optional filtering."""
     query = select(Business)
     if category:
         query = query.where(Business.category == category)
+    if campaign_id:
+        query = query.where(Business.campaign_id == campaign_id)
     
     query = query.offset(skip).limit(limit)
     leads = session.exec(query).all()
@@ -103,23 +106,20 @@ def delete_lead(
     return {"message": "Lead deleted successfully"}
 
 
-@router.post("/discover", response_model=DiscoverResponse)
-async def discover_leads(
-    request: DiscoverRequest,
-    session: Session = Depends(get_session),
-):
-    """Discover new leads based on sector and location."""
-    new_leads = await discover_businesses(
-        sector=request.sector,
-        location=request.location,
-        limit=request.limit,
-        session=session,
-    )
+@router.post("/discover", deprecated=True)
+async def discover_leads_deprecated():
+    """DEPRECATED. Use /api/campaigns/discover instead."""
+    return {"message": "Deprecated. Use /api/campaigns/discover instead."}
+    
+    if len(new_leads) > 0:
+        message = f"Discovered real businesses successfully"
+    else:
+        message = "No real businesses found. Try another sector/location or use CSV import."
     
     return {
-        "leads": new_leads,
-        "total": len(new_leads),
-        "message": f"Successfully discovered {len(new_leads)} leads for {request.sector} in {request.location}"
+        "businesses": new_leads,
+        "count": len(new_leads),
+        "message": message
     }
 
 

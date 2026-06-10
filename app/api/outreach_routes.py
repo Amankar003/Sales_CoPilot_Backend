@@ -91,3 +91,23 @@ def get_outreach(
         raise HTTPException(status_code=404, detail="Outreach content not found. Generate it first.")
         
     return outreach
+
+@router.get("", response_model=list[OutreachResponse])
+def get_all_outreach(
+    campaign_id: int = None,
+    session: Session = Depends(get_session),
+):
+    """Get all outreach content, optionally filtered by campaign."""
+    query = select(Outreach, Business.name).join(Business, Outreach.business_id == Business.id)
+    if campaign_id:
+        query = query.where(Business.campaign_id == campaign_id)
+        
+    results = session.exec(query.order_by(Outreach.created_at.desc())).all()
+    
+    response_list = []
+    for outreach, b_name in results:
+        data = outreach.model_dump()
+        data["business_name"] = b_name
+        response_list.append(data)
+        
+    return response_list

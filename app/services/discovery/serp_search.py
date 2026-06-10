@@ -2,6 +2,7 @@
 serp_search.py - DuckDuckGo search integration for discovering businesses.
 """
 
+import time
 from typing import List, Dict, Any
 from app.utils.logger import get_logger
 
@@ -11,7 +12,7 @@ logger = get_logger(__name__)
 async def search_businesses_ddg(
     sector: str,
     location: str,
-    limit: int = 10,
+    max_runtime_seconds: int = 120,
 ) -> List[Dict[str, Any]]:
     """
     Search for businesses using DuckDuckGo.
@@ -24,17 +25,24 @@ async def search_businesses_ddg(
         logger.info(f"DuckDuckGo search: '{query}'")
 
         results = []
+        start_time = time.time()
+        
         with DDGS() as ddgs:
-            search_results = list(ddgs.text(query, max_results=limit))
-
-        for result in search_results:
-            business_info = {
-                "name": result.get("title", "Unknown"),
-                "description": result.get("body", ""),
-                "website": result.get("href", ""),
-                "source": "duckduckgo",
-            }
-            results.append(business_info)
+            # Fetch a large technical cap of results
+            search_iterator = ddgs.text(query, max_results=100)
+            
+            for result in search_iterator:
+                if time.time() - start_time > max_runtime_seconds:
+                    logger.info("DDG search stopped due to max runtime.")
+                    break
+                    
+                business_info = {
+                    "name": result.get("title", "Unknown"),
+                    "description": result.get("body", ""),
+                    "website": result.get("href", ""),
+                    "source": "duckduckgo",
+                }
+                results.append(business_info)
 
         logger.info(f"DuckDuckGo returned {len(results)} results")
         return results
