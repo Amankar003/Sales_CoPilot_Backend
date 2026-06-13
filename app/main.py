@@ -32,6 +32,7 @@ from app.api.email_routes import router as email_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.campaign_routes import router as campaign_router
 from app.api.system_routes import router as system_router
+from app.api.smtp_routes import router as smtp_router
 
 logger = get_logger(__name__)
 
@@ -212,6 +213,7 @@ app.include_router(email_router)
 app.include_router(dashboard_router)
 app.include_router(campaign_router)
 app.include_router(system_router)
+app.include_router(smtp_router)
 
 
 @app.get("/")

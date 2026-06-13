@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     SMTP_EMAIL: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
 
+    # SMTP Pool Configuration
+    SMTP_ENCRYPTION_KEY: Optional[str] = None
+    SMTP_STRATEGY: str = "least_used"  # round_robin, random, least_used, weighted
+
     # CORS
     FRONTEND_URL: str = "http://localhost:3000"
 

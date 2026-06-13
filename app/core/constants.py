@@ -136,3 +136,13 @@ RECOMMENDABLE_SERVICES = [
     "Marketing Automation",
     "Analytics & Reporting",
 ]
+
+# SMTP Pool constants
+SMTP_STRATEGIES = ["round_robin", "random", "least_used", "weighted"]
+SMTP_MAX_RETRIES = 3
+SMTP_AUTO_BLOCK_THRESHOLD = 5  # Consecutive failures before auto-blocking account
+SMTP_DEFAULT_DAILY_LIMIT = 500
+SMTP_DEFAULT_HOURLY_LIMIT = 50
+SMTP_WARMUP_DEFAULT_INCREMENT = 20
+SMTP_PROVIDERS = ["gmail", "outlook", "brevo", "mailgun", "ses", "custom"]
+
